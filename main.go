@@ -45,20 +45,15 @@ func main() {
 
 	serverCfg := config.LoadFromEnv()
 	oauthEnabled := len(serverCfg.EnabledOAuthProviders()) > 0
-	httpClient := &http.Client{}
-	if oauthEnabled {
-		httpClient, err = serverCfg.BuildOAuthHTTPClient()
-		if err != nil {
-			logger.Error("unable to load tls config", logger.ErrAttr(err))
-			os.Exit(1)
-		}
-	}
 	setup.EnsureInitialAdmin(st, oauthEnabled)
 	setup.EnsureDemoFixtures(st)
 
 	handlers.StartBackgroundSync(st)
 
-	s := server.NewServer(st, serverCfg, httpClient)
+	s, err := server.NewServer(st, serverCfg)
+	if err != nil {
+		logger.Error("server init failure", logger.ErrAttr(err))
+	}
 
 	handler := middleware.SecurityHeaders(s)
 	handler = middleware.MaxBytes(handler)

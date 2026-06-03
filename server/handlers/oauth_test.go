@@ -62,7 +62,10 @@ func TestOAuthStartHandler_ProviderRequired(t *testing.T) {
 	cfg := &config.Config{OAuth: config.OAuthConfig{Providers: map[string]config.OAuthProviderConfig{
 		"sso": oauthTestProvider(),
 	}}}
-	registry := oauth.NewProviderRegistry(cfg)
+	registry, err := oauth.NewProviderRegistry(cfg)
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() error = %v", err)
+	}
 	handler := OAuthStartHandler(cfg, registry)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/", nil)
 	rr := httptest.NewRecorder()
@@ -74,7 +77,10 @@ func TestOAuthStartHandler_ProviderRequired(t *testing.T) {
 
 func TestOAuthStartHandler_ProviderNotEnabled(t *testing.T) {
 	cfg := &config.Config{OAuth: config.OAuthConfig{Providers: map[string]config.OAuthProviderConfig{}}}
-	registry := oauth.NewProviderRegistry(cfg)
+	registry, err := oauth.NewProviderRegistry(cfg)
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() error = %v", err)
+	}
 	handler := OAuthStartHandler(cfg, registry)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/sso/start", nil)
 	rr := httptest.NewRecorder()
@@ -88,7 +94,10 @@ func TestOAuthStartHandler_SetsStateCookie(t *testing.T) {
 	cfg := &config.Config{OAuth: config.OAuthConfig{Providers: map[string]config.OAuthProviderConfig{
 		"sso": oauthTestProvider(),
 	}}}
-	registry := oauth.NewProviderRegistry(cfg)
+	registry, err := oauth.NewProviderRegistry(cfg)
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() error = %v", err)
+	}
 	handler := OAuthStartHandler(cfg, registry)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/sso/start?invite_token=secret-invite", nil)
 	rr := httptest.NewRecorder()
@@ -116,7 +125,10 @@ func TestOAuthCallbackHandler_InvalidState(t *testing.T) {
 	cfg := &config.Config{OAuth: config.OAuthConfig{Providers: map[string]config.OAuthProviderConfig{
 		"sso": oauthTestProvider(),
 	}}}
-	registry := oauth.NewProviderRegistry(cfg)
+	registry, err := oauth.NewProviderRegistry(cfg)
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() error = %v", err)
+	}
 	handler := OAuthCallbackHandler(s, cfg, registry)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/sso/callback?code=abc&state=wrong", nil)
 	rr := httptest.NewRecorder()
@@ -131,7 +143,10 @@ func TestOAuthStartHandler_RedirectsToProvider(t *testing.T) {
 	cfg := &config.Config{OAuth: config.OAuthConfig{Providers: map[string]config.OAuthProviderConfig{
 		"sso": oauthTestProvider(),
 	}}}
-	registry := oauth.NewProviderRegistry(cfg)
+	registry, err := oauth.NewProviderRegistry(cfg)
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() error = %v", err)
+	}
 	handler := OAuthStartHandler(cfg, registry)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/sso/start", nil)
 	req.Host = "example.com"
@@ -151,7 +166,10 @@ func TestOAuthCallbackHandler_MissingCode(t *testing.T) {
 	cfg := &config.Config{OAuth: config.OAuthConfig{Providers: map[string]config.OAuthProviderConfig{
 		"sso": oauthTestProvider(),
 	}}}
-	registry := oauth.NewProviderRegistry(cfg)
+	registry, err := oauth.NewProviderRegistry(cfg)
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() error = %v", err)
+	}
 	handler := OAuthCallbackHandler(s, cfg, registry)
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/sso/callback", nil)
 	rr := httptest.NewRecorder()
