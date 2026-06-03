@@ -17,7 +17,6 @@ type Config struct {
 
 type OAuthConfig struct {
 	Providers map[string]OAuthProviderConfig
-	TLSConfig OAuthTLSConfig
 }
 
 type OAuthProviderConfig struct {
@@ -35,12 +34,14 @@ type OAuthProviderConfig struct {
 	EmailsVerifiedClaim string // Emails-list entry claim that must be true (e.g. verified on GitHub /user/emails)
 	AllowEmailMatch     bool   // Allow signing in to an existing account by email alone; default false
 	DisplayName         string // Login/signup button label; default derived from provider id
+	ClientMTLS          OAuthClientMTLSConfig
 }
 
-type OAuthTLSConfig struct {
-	TLSCertFile string // Path to TLS Certificate file
-	TLSKeyFile  string // Path to TLS Key file
-	TLSVersion  uint16 // e.g. tls.VersionTLS12
+type OAuthClientMTLSConfig struct {
+	Enabled     bool
+	TLSCertFile string
+	TLSKeyFile  string
+	TLSVersion  uint16
 }
 
 func NormalizeOAuthProviderID(id string) string {
@@ -59,6 +60,48 @@ func (p OAuthProviderConfig) hasEndpoints() bool {
 
 func (p OAuthProviderConfig) Enabled() bool {
 	return p.hasCredentials() && p.hasEndpoints()
+}
+
+func (p OAuthProviderConfig) BuildHTTPClient() (*http.Client, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
+	}
+
+	if !p.ClientMTLS.Enabled {
+		return client, nil
+	}
+
+	switch {
+	case p.ClientMTLS.TLSCertFile == "" && p.ClientMTLS.TLSKeyFile == "":
+		return nil, fmt.Errorf("oauth client mTLS enabled but TLS cert file and TLS key file are required")
+	case p.ClientMTLS.TLSCertFile == "":
+		return nil, fmt.Errorf("oauth client mTLS enabled but TLS cert file is required")
+	case p.ClientMTLS.TLSKeyFile == "":
+		return nil, fmt.Errorf("oauth client mTLS enabled but TLS key file is required")
+	}
+
+	cert, err := tls.LoadX509KeyPair(
+		p.ClientMTLS.TLSCertFile,
+		p.ClientMTLS.TLSKeyFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load OAuth client mTLS cert: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+
+	if p.ClientMTLS.TLSVersion != 0 {
+		tlsConfig.MinVersion = p.ClientMTLS.TLSVersion
+	}
+
+	transport.TLSClientConfig = tlsConfig
+
+	return client, nil
 }
 
 // EnabledOAuthProviders returns the list of provider IDs that are configured and enabled.
@@ -98,35 +141,6 @@ func DefaultOAuthDisplayName(providerID string) string {
 	return "Sign in with " + strings.ToUpper(providerID[:1]) + providerID[1:]
 }
 
-// BuildOAuthHTTPClient builds the http client and configures TLS if enabled
-func (c *Config) BuildOAuthHTTPClient() (*http.Client, error) {
-	defaultClient := &http.Client{Timeout: 15 * time.Second}
-	if c == nil || c.OAuth.TLSConfig.TLSCertFile == "" || c.OAuth.TLSConfig.TLSKeyFile == "" {
-		return defaultClient, nil
-	}
-
-	cert, err := tls.LoadX509KeyPair(
-		c.OAuth.TLSConfig.TLSCertFile,
-		c.OAuth.TLSConfig.TLSKeyFile,
-	)
-	if err != nil {
-		err := fmt.Errorf("failed to load OAuth TLS cert %v", err)
-		return defaultClient, err
-	}
-
-	tlsConfig := &tls.Config{
-		MinVersion:   c.OAuth.TLSConfig.TLSVersion,
-		Certificates: []tls.Certificate{cert},
-	}
-
-	return &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-	}, nil
-}
-
 func LoadFromEnv() *Config {
 	var cfg Config
 	providers := make(map[string]OAuthProviderConfig)
@@ -149,28 +163,7 @@ func LoadFromEnv() *Config {
 	if origin := strings.TrimSpace(os.Getenv("APP_ORIGIN")); origin != "" {
 		cfg.AppOrigin = origin
 	}
-	if enableTLS := strings.ToLower(strings.TrimSpace(os.Getenv("OAUTH_TLS_ENABLED"))); enableTLS == "true" {
-		var tlsConfig = &OAuthTLSConfig{
-			TLSVersion: tls.VersionTLS12,
-		}
-		if tlsCertFile := strings.TrimSpace(os.Getenv("OAUTH_TLS_CERT_FILE")); tlsCertFile != "" {
-			tlsConfig.TLSCertFile = tlsCertFile
-		}
-		if tlsKeyFile := strings.TrimSpace(os.Getenv("OAUTH_TLS_KEY_FILE")); tlsKeyFile != "" {
-			tlsConfig.TLSKeyFile = tlsKeyFile
-		}
-		if tlsVersion := strings.TrimSpace(os.Getenv("OAUTH_TLS_VERSION")); tlsVersion != "" {
-			switch tlsVersion {
-			case "1.2":
-				tlsConfig.TLSVersion = tls.VersionTLS12
-			case "1.3":
-				tlsConfig.TLSVersion = tls.VersionTLS13
-			default:
-				tlsConfig.TLSVersion = tls.VersionTLS12
-			}
-		}
-		cfg.OAuth.TLSConfig = *tlsConfig
-	}
+
 	return &cfg
 }
 
@@ -213,6 +206,12 @@ func loadOAuthProviderFromEnv(providerID string) OAuthProviderConfig {
 		EmailsVerifiedClaim: strings.TrimSpace(os.Getenv(prefix + "EMAILS_VERIFIED_CLAIM")),
 		AllowEmailMatch:     envBoolDefault(prefix+"ALLOW_EMAIL_MATCH", false),
 		DisplayName:         strings.TrimSpace(os.Getenv(prefix + "DISPLAY_NAME")),
+		ClientMTLS: OAuthClientMTLSConfig{
+			Enabled:     envBoolDefault(prefix+"CLIENT_MTLS_ENABLED", false),
+			TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "CLIENT_MTLS_CERT_FILE")),
+			TLSKeyFile:  strings.TrimSpace(os.Getenv(prefix + "CLIENT_MTLS_KEY_FILE")),
+			TLSVersion:  parseTLSVersion(os.Getenv(prefix + "CLIENT_MTLS_TLS_VERSION")),
+		},
 	}
 	if scopes := strings.TrimSpace(os.Getenv(prefix + "SCOPES")); scopes != "" {
 		p.Scopes = splitScopes(scopes)
@@ -261,6 +260,18 @@ func mergeOAuthProvider(base, overlay OAuthProviderConfig) OAuthProviderConfig {
 	if overlay.DisplayName != "" {
 		base.DisplayName = overlay.DisplayName
 	}
+	if overlay.ClientMTLS.Enabled {
+		base.ClientMTLS.Enabled = true
+	}
+	if overlay.ClientMTLS.TLSCertFile != "" {
+		base.ClientMTLS.TLSCertFile = overlay.ClientMTLS.TLSCertFile
+	}
+	if overlay.ClientMTLS.TLSKeyFile != "" {
+		base.ClientMTLS.TLSKeyFile = overlay.ClientMTLS.TLSKeyFile
+	}
+	if overlay.ClientMTLS.TLSVersion != 0 {
+		base.ClientMTLS.TLSVersion = overlay.ClientMTLS.TLSVersion
+	}
 	return base
 }
 
@@ -289,4 +300,17 @@ func splitScopes(raw string) []string {
 		}
 	}
 	return out
+}
+
+func parseTLSVersion(raw string) uint16 {
+	switch strings.TrimSpace(raw) {
+	case "":
+		return tls.VersionTLS12
+	case "1.2":
+		return tls.VersionTLS12
+	case "1.3":
+		return tls.VersionTLS13
+	default:
+		return 0
+	}
 }

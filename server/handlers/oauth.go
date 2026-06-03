@@ -151,7 +151,7 @@ func OAuthCallbackHandler(s store.Storer, cfg *config.Config, registry *oauth.Pr
 		ctx := context.WithValue(
 			r.Context(),
 			oauth2.HTTPClient,
-			registry.HTTPClient(),
+			registry.HTTPClient(provider),
 		)
 		token, err := conf.Exchange(ctx, code)
 		if err != nil {

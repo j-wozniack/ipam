@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -23,7 +24,12 @@ func TestOAuthUserInfo_FetchUser(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := newOAuthUserInfo(srv.URL, "sub", "email", "", "", "email_verified", "")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
+	}
+	f := newOAuthUserInfo(srv.URL, "sub", "email", "", "", "email_verified", "", client)
 	id, email, err := f.FetchUser(context.Background(), &oauth2.Token{AccessToken: "access-token"})
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +52,12 @@ func TestOAuthUserInfo_FetchUser_RejectsUnverifiedEmail(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := newOAuthUserInfo(srv.URL, "sub", "email", "", "", "email_verified", "")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
+	}
+	f := newOAuthUserInfo(srv.URL, "sub", "email", "", "", "email_verified", "", client)
 	_, _, err := f.FetchUser(context.Background(), &oauth2.Token{AccessToken: "access-token"})
 	if err == nil {
 		t.Fatal("expected error for unverified email")
@@ -69,7 +80,12 @@ func TestOAuthUserInfo_FetchUser_EmailsListFallback(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := newOAuthUserInfo(srv.URL+"/user", "id", "email", srv.URL+"/user/emails", "primary", "", "verified")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
+	}
+	f := newOAuthUserInfo(srv.URL+"/user", "id", "email", srv.URL+"/user/emails", "primary", "", "verified", client)
 	id, email, err := f.FetchUser(context.Background(), &oauth2.Token{AccessToken: "access-token"})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +114,12 @@ func TestOAuthUserInfo_FetchUser_SkipsUnverifiedListEntry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	f := newOAuthUserInfo(srv.URL+"/user", "id", "email", srv.URL+"/user/emails", "primary", "", "verified")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
+	}
+	f := newOAuthUserInfo(srv.URL+"/user", "id", "email", srv.URL+"/user/emails", "primary", "", "verified", client)
 	_, email, err := f.FetchUser(context.Background(), &oauth2.Token{AccessToken: "access-token"})
 	if err != nil {
 		t.Fatal(err)
