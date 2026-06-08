@@ -46,7 +46,7 @@ For each id `<ID>` (uppercased in env names; hyphens become underscores):
 | `OAUTH_<ID>_CLIENT_MTLS_ENABLED` | no | `false` | Set to `true` to enable mTLS for OAuth client |
 | `OAUTH_<ID>_CLIENT_MTLS_CERT_FILE` | no | `""` | The TLS certificate file to use |
 | `OAUTH_<ID>_CLIENT_MTLS_KEY_FILE` | no | `""` | The TLS key file to use |
-| `OAUTH_<ID>_CLIENT_MTLS_VERSION` | no | `"1.2"` | The TLS version to use. Supports 1.2 and 1.3 |
+| `OAUTH_<ID>_CLIENT_MTLS_TLS_VERSION` | no | `"1.2"` | The TLS version to use. Supports 1.2 and 1.3 |
 
 **Email verification:** IPAM never trusts an email address from OAuth unless the provider marks it verified. For a single userinfo JSON object, that means `email_verified: true` (claim name configurable). For a separate emails list, only verified entries are considered; the primary verified address wins, otherwise the first verified address. This blocks IdP or GitHub responses that include an unverified email from taking over an existing account.
 
